@@ -51,6 +51,7 @@ class fr3Robot(Robot):
         self.robot = RobotInterface(
             ip_address=robot_ip,
             port=franka_port,
+            enforce_version=False,
         )
         self.gripper = GripperInterface(
             ip_address=robot_ip,
