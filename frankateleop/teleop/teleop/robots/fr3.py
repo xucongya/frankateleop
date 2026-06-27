@@ -6,6 +6,32 @@ import numpy as np
 from teleop.robots.robot import Robot
 
 MAX_OPEN = 0.09
+TORQUE_OBS_KEYS = (
+    "joint_torques_computed",
+    "prev_joint_torques_computed",
+    "prev_joint_torques_computed_safened",
+    "motor_torques_measured",
+    "motor_torques_external",
+    "motor_torques_desired",
+)
+
+
+def _to_numpy(value) -> np.ndarray:
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().numpy()
+    return np.asarray(value, dtype=float)
+
+
+def _estimate_ee_external_wrench(
+    robot, joint_positions: np.ndarray, joint_torques: np.ndarray
+) -> np.ndarray:
+    try:
+        jacobian = robot.robot_model.compute_jacobian(torch.Tensor(joint_positions))
+        jacobian = _to_numpy(jacobian)
+        wrench, *_ = np.linalg.lstsq(jacobian.T, joint_torques, rcond=None)
+        return wrench
+    except Exception:
+        return np.full(6, np.nan)
 
 
 class fr3Robot(Robot):
@@ -75,15 +101,31 @@ class fr3Robot(Robot):
         self.gripper.goto(width=(MAX_OPEN * (1 - joint_state[-1])), speed=1, force=1)
 
     def get_observations(self) -> Dict[str, np.ndarray]:
-        joints = self.get_joint_state()
-        pos_quat = np.zeros(7)
+        robot_state = self.robot.get_robot_state()
+        robot_joints = _to_numpy(robot_state.joint_positions)
+        gripper_state = self.gripper.get_state()
+        joints = np.append(robot_joints, gripper_state.width / MAX_OPEN)
+        joint_velocities = np.append(_to_numpy(robot_state.joint_velocities), 0.0)
+        ee_pos, ee_quat = self.robot.robot_model.forward_kinematics(
+            torch.Tensor(robot_joints)
+        )
+        pos_quat = np.concatenate((_to_numpy(ee_pos), _to_numpy(ee_quat)))
         gripper_pos = np.array([joints[-1]])
-        return {
+        observations = {
             "joint_positions": joints,
-            "joint_velocities": joints,
+            "joint_velocities": joint_velocities,
             "ee_pos_quat": pos_quat,
             "gripper_position": gripper_pos,
         }
+        for key in TORQUE_OBS_KEYS:
+            observations[key] = _to_numpy(getattr(robot_state, key))
+
+        observations["ee_external_wrench"] = _estimate_ee_external_wrench(
+            self.robot,
+            robot_joints,
+            observations["motor_torques_external"],
+        )
+        return observations
 
 
 def main():
@@ -105,4 +147,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
