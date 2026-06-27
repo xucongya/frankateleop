@@ -1,5 +1,6 @@
 import os
 import json
+import subprocess
 
 import polymetis
 
@@ -21,13 +22,25 @@ else:
     original_cwd = os.getcwd()
     os.chdir(os.path.dirname(polymetis.__file__))
 
-    # Git describe output
-    stream = os.popen("git describe --tags")
-    version_string = [line for line in stream][0]
+    try:
+        version_string = subprocess.check_output(
+            ["git", "describe", "--tags"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except subprocess.CalledProcessError:
+        version_string = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
 
     # Modify to same format as conda env variable GIT_DESCRIBE_NUMBER
-    version_items = version_string.strip("\n").split("-")
-    __version__ = f"{version_items[-2]}_{version_items[-1]}"
+    version_items = version_string.split("-")
+    if len(version_items) >= 2:
+        __version__ = f"{version_items[-2]}_{version_items[-1]}"
+    else:
+        __version__ = version_string
 
     # Reset cwd
     os.chdir(original_cwd)
