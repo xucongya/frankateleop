@@ -33,6 +33,7 @@ class Args:
     hostname: str = "127.0.0.1"
     robot_type: str = None  # only needed for quest agent or spacemouse agent
     hz: int = 100
+    max_joint_speed: float = 0.25
     start_joints: Optional[Tuple[float, ...]] = None
 
     teleop_port: Optional[str] = None
@@ -213,6 +214,10 @@ def main(args):
 
     save_path = None
     start_time = time.time()
+    last_command = np.asarray(obs["joint_positions"], dtype=float).copy()
+    last_command_time = time.monotonic()
+    joint_indices = np.arange(7)
+    print(f"Joint speed limit: {args.max_joint_speed:.3f} rad/s")
     while True:
         num = time.time() - start_time
         message = f"\rTime passed: {round(num, 2)}          "
@@ -223,7 +228,18 @@ def main(args):
             end="",
             flush=True,
         )
-        action = agent.act(obs)
+        raw_action = np.asarray(agent.act(obs), dtype=float)
+        command_time = time.monotonic()
+        command_dt = min(max(command_time - last_command_time, 0.0), 0.1)
+        max_joint_delta = args.max_joint_speed * command_dt
+
+        action = raw_action.copy()
+        joint_delta = raw_action[joint_indices] - last_command[joint_indices]
+        action[joint_indices] = last_command[joint_indices] + np.clip(
+            joint_delta, -max_joint_delta, max_joint_delta
+        )
+        last_command = action.copy()
+        last_command_time = command_time
         dt = datetime.datetime.now()
         if args.use_save_interface:
             state = kb_interface.update()

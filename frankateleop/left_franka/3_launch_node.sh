@@ -20,5 +20,7 @@ if [[ ! -f "$SCRIPT_PATH" ]]; then
 fi
 
 echo ">>> 启动Robot Node ..."
+export no_proxy="${no_proxy:+$no_proxy,}localhost,127.0.0.1,::1,192.168.1.100,192.168.1.0/24,172.16.0.0/16"
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}localhost,127.0.0.1,::1,192.168.1.100,192.168.1.0/24,172.16.0.0/16"
 python3 "$SCRIPT_PATH" --robot=fr3_left --tele_port=6002 --robot_port=50052 --gripper_port=50054 --robot_ip=127.0.0.1
 #robot_ip是直接连接机器人的主机的IP，如果是本机直连机器人，可以用127.0.0.1代替
