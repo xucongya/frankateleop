@@ -1,0 +1,8 @@
+# Python and plotting caches
+__pycache__/
+*.py[cod]
+.matplotlib/
+
+# Local capture outputs and background upload logs
+camera_snapshots/
+/upload_logs/

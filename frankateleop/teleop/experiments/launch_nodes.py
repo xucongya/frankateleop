@@ -16,6 +16,7 @@ class Args:
     robot_ip: str = "192.168.1.10"
     robot_port: int = 50051
     gripper_port: int = 50052
+    force_sensor_port: str = "/dev/ttyACM0"
 
 
 def launch_robot_server(args: Args):
@@ -76,7 +77,8 @@ def launch_robot_server(args: Args):
                 robot_ip=args.robot_ip, 
                 franka_port=args.robot_port, 
                 frankahand_port=args.gripper_port, 
-                joint_positions_desired=fr3_joint_configs["fr3_left"]
+                joint_positions_desired=fr3_joint_configs["fr3_left"],
+                force_sensor_port=args.force_sensor_port,
                 )
         
         elif args.robot == "fr3_right":
@@ -86,7 +88,8 @@ def launch_robot_server(args: Args):
                 robot_ip=args.robot_ip, 
                 franka_port=args.robot_port, 
                 frankahand_port=args.gripper_port, 
-                joint_positions_desired=fr3_joint_configs["fr3_right"]
+                joint_positions_desired=fr3_joint_configs["fr3_right"],
+                force_sensor_port=args.force_sensor_port,
                 )
        
         elif args.robot == "fr3":
@@ -95,7 +98,8 @@ def launch_robot_server(args: Args):
             robot = fr3Robot(
                 robot_ip=args.robot_ip, 
                 franka_port=args.robot_port, 
-                frankahand_port=args.gripper_port
+                frankahand_port=args.gripper_port,
+                force_sensor_port=args.force_sensor_port,
                 )
         elif args.robot == "bimanual_ur":
             from teleop.robots.ur import URRobot
@@ -122,4 +126,3 @@ def main(args):
 
 if __name__ == "__main__":
     main(tyro.cli(Args))
-

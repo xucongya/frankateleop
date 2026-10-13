@@ -22,12 +22,18 @@ def get_device_ids() -> List[str]:
 
 class RealSenseCamera(CameraDriver):
     def __repr__(self) -> str:
-        return f"RealSenseCamera(device_id={self._device_id})"
+        return f"RealSenseCamera(device_id={self._device_id}, enable_depth={self._enable_depth})"
 
-    def __init__(self, device_id: Optional[str] = None, flip: bool = False):
+    def __init__(
+        self,
+        device_id: Optional[str] = None,
+        flip: bool = False,
+        enable_depth: bool = True,
+    ):
         import pyrealsense2 as rs
 
         self._device_id = device_id
+        self._enable_depth = enable_depth
 
         if device_id is None:
             ctx = rs.context()
@@ -42,7 +48,8 @@ class RealSenseCamera(CameraDriver):
             config = rs.config()
             config.enable_device(device_id)
 
-        config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+        if self._enable_depth:
+            config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
         config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
         self._pipeline.start(config)
         self._flip = flip
@@ -50,7 +57,7 @@ class RealSenseCamera(CameraDriver):
     def read(
         self,
         img_size: Optional[Tuple[int, int]] = None,  # farthest: float = 0.12
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Read a frame from the camera.
 
         Args:
@@ -59,28 +66,31 @@ class RealSenseCamera(CameraDriver):
 
         Returns:
             np.ndarray: The color image, shape=(H, W, 3)
-            np.ndarray: The depth image, shape=(H, W, 1)
+            Optional[np.ndarray]: The depth image, shape=(H, W, 1), or None
+                when depth capture is disabled.
         """
         import cv2
 
         frames = self._pipeline.wait_for_frames()
         color_frame = frames.get_color_frame()
         color_image = np.asanyarray(color_frame.get_data())
-        depth_frame = frames.get_depth_frame()
-        depth_image = np.asanyarray(depth_frame.get_data())
-        # depth_image = cv2.convertScaleAbs(depth_image, alpha=0.03)
         if img_size is None:
             image = color_image[:, :, ::-1]
-            depth = depth_image
         else:
             image = cv2.resize(color_image, img_size)[:, :, ::-1]
-            depth = cv2.resize(depth_image, img_size)
 
         # rotate 180 degree's because everything is upside down in order to center the camera
         if self._flip:
             image = cv2.rotate(image, cv2.ROTATE_180)
-            depth = cv2.rotate(depth, cv2.ROTATE_180)[:, :, None]
-        else:
+
+        depth = None
+        if self._enable_depth:
+            depth_frame = frames.get_depth_frame()
+            depth = np.asanyarray(depth_frame.get_data())
+            if img_size is not None:
+                depth = cv2.resize(depth, img_size)
+            if self._flip:
+                depth = cv2.rotate(depth, cv2.ROTATE_180)
             depth = depth[:, :, None]
 
         return image, depth
@@ -90,7 +100,6 @@ def _debug_read(camera, save_datastream=False):
     import cv2
 
     cv2.namedWindow("image")
-    cv2.namedWindow("depth")
     counter = 0
     if not os.path.exists("images"):
         os.makedirs("images")
@@ -99,16 +108,20 @@ def _debug_read(camera, save_datastream=False):
     while True:
         time.sleep(0.1)
         image, depth = camera.read()
-        depth = np.concatenate([depth, depth, depth], axis=-1)
+        if depth is not None:
+            depth = np.concatenate([depth, depth, depth], axis=-1)
         key = cv2.waitKey(1)
         cv2.imshow("image", image[:, :, ::-1])
-        cv2.imshow("depth", depth)
+        if depth is not None:
+            cv2.imshow("depth", depth)
         if key == ord("s"):
             cv2.imwrite(f"images/image_{counter}.png", image[:, :, ::-1])
-            cv2.imwrite(f"images/depth_{counter}.png", depth)
+            if depth is not None:
+                cv2.imwrite(f"images/depth_{counter}.png", depth)
         if save_datastream:
             cv2.imwrite(f"stream/image_{counter}.png", image[:, :, ::-1])
-            cv2.imwrite(f"stream/depth_{counter}.png", depth)
+            if depth is not None:
+                cv2.imwrite(f"stream/depth_{counter}.png", depth)
         counter += 1
         if key == 27:
             break

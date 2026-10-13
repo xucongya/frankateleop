@@ -16,6 +16,15 @@ from teleop.robots.robot import PrintRobot
 from teleop.zmq_core.robot_node import ZMQClientRobot
 from teleop.zmq_core.camera_node import ZMQClientCamera
 
+
+CAMERA_OBS_KEYS = {
+    "wrist_front": ("wrist_rgb_front", "wrist_depth_front"),
+    "wrist_back": ("wrist_rgb_back", "wrist_depth_back"),
+    "base": ("base_rgb", "base_depth"),
+    "local": ("local_rgb", "local_depth"),
+}
+
+
 def print_color(*args, color=None, attrs=(), **kwargs):
     import termcolor
 
@@ -28,8 +37,10 @@ def print_color(*args, color=None, attrs=(), **kwargs):
 class Args:
     agent: str = "none"
     tele_port: int = 6001
-    wrist_camera_port: int = 5000
-    base_camera_port: int = 5001
+    wrist_front_camera_port: int = 5000
+    wrist_back_camera_port: int = 5001
+    base_camera_port: int = 5002
+    local_camera_port: int = 5003
     hostname: str = "127.0.0.1"
     robot_type: str = None  # only needed for quest agent or spacemouse agent
     hz: int = 100
@@ -49,12 +60,18 @@ def main(args):
         camera_clients = {}
     else:
         camera_clients = {
-            # you can optionally add camera nodes here for imitation learning purposes
-            "wrist": ZMQClientCamera(port=args.wrist_camera_port, host=args.hostname),
+            "wrist_front": ZMQClientCamera(port=args.wrist_front_camera_port, host=args.hostname),
+            "wrist_back": ZMQClientCamera(port=args.wrist_back_camera_port, host=args.hostname),
             "base": ZMQClientCamera(port=args.base_camera_port, host=args.hostname),
+            "local": ZMQClientCamera(port=args.local_camera_port, host=args.hostname),
         }
         robot_client = ZMQClientRobot(port=args.tele_port, host=args.hostname)
-    env = RobotEnv(robot_client, control_rate_hz=args.hz, camera_dict=camera_clients)
+    env = RobotEnv(
+        robot_client,
+        control_rate_hz=args.hz,
+        camera_dict=camera_clients,
+        camera_obs_keys=CAMERA_OBS_KEYS,
+    )
 
     if args.bimanual:
         if args.agent == "teleop":
@@ -228,6 +245,9 @@ def main(args):
         if args.use_save_interface:
             state = kb_interface.update()
             if state == "start":
+                print("\nZeroing force sensor; keep the end effector unloaded and still ...")
+                zero_offset = env.robot().zero_force_sensor()
+                print(f"Force sensor zeroed. Offset: {zero_offset}")
                 dt_time = datetime.datetime.now()
                 save_path = (
                     Path(args.data_dir).expanduser()

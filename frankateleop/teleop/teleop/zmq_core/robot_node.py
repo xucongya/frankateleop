@@ -48,6 +48,17 @@ class ZMQServerRobot:
                     result = self._robot.command_joint_state(**args)
                 elif method == "get_observations":
                     result = self._robot.get_observations()
+                elif method == "zero_force_sensor":
+                    zero_method = getattr(self._robot, "zero_force_sensor", None)
+                    if zero_method is None:
+                        result = {"ok": False, "error": "Robot has no force sensor to zero"}
+                    else:
+                        try:
+                            result = {"ok": True, "offset": zero_method()}
+                        except Exception as exc:
+                            # Always reply to a REQ client, otherwise its socket is
+                            # left waiting forever when taring fails.
+                            result = {"ok": False, "error": str(exc)}
                 else:
                     result = {"error": "Invalid method"}
                     print(result)
@@ -123,3 +134,12 @@ class ZMQClientRobot(Robot):
         self._socket.send(send_message)
         result = pickle.loads(self._socket.recv())
         return result
+
+    def zero_force_sensor(self) -> np.ndarray:
+        """Tare the remote end-effector force sensor."""
+        request = {"method": "zero_force_sensor"}
+        self._socket.send(pickle.dumps(request))
+        result = pickle.loads(self._socket.recv())
+        if not result["ok"]:
+            raise RuntimeError(f"Failed to zero force sensor: {result['error']}")
+        return result["offset"]

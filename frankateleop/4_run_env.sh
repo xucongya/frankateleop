@@ -19,6 +19,13 @@ if [[ ! -f "$SCRIPT_PATH" ]]; then
     exit 1
 fi
 
-echo ">>> 启动Gripper 客户端 ..."
-python3 "$SCRIPT_PATH" --agent=teleop --use-save-interface
-#如果要启用采集数据，需要在后面增加“--use_save_interface”
+echo ">>> 启动遥操作与四路相机数据采集 ..."
+# 深度是否保存跟随相机节点的 --depth / --no-depth 配置。
+python3 "$SCRIPT_PATH" \
+    --agent=teleop \
+    --teleop_port=/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTBM7TAW-if00-port0 \
+    --wrist-front-camera-port=5000 \
+    --wrist-back-camera-port=5001 \
+    --base-camera-port=5002 \
+    --local-camera-port=5003 \
+    --use-save-interface

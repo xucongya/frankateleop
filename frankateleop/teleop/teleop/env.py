@@ -1,5 +1,5 @@
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
@@ -24,10 +24,13 @@ class RobotEnv:
         robot: Robot,
         control_rate_hz: float = 100.0,
         camera_dict: Optional[Dict[str, CameraDriver]] = None,
+        camera_obs_keys: Optional[Dict[str, Tuple[str, str]]] = None,
     ) -> None:
         self._robot = robot
         self._rate = Rate(control_rate_hz)
         self._camera_dict = {} if camera_dict is None else camera_dict
+        # Optional per-camera (RGB key, depth key) names for saved observations.
+        self._camera_obs_keys = {} if camera_obs_keys is None else camera_obs_keys
 
     def robot(self) -> Robot:
         """Get the robot object.
@@ -66,8 +69,12 @@ class RobotEnv:
         observations = {}
         for name, camera in self._camera_dict.items():
             image, depth = camera.read()
-            observations[f"{name}_rgb"] = image
-            observations[f"{name}_depth"] = depth
+            rgb_key, depth_key = self._camera_obs_keys.get(
+                name, (f"{name}_rgb", f"{name}_depth")
+            )
+            observations[rgb_key] = image
+            if depth is not None:
+                observations[depth_key] = depth
 
         robot_obs = self._robot.get_observations()
         assert "joint_positions" in robot_obs

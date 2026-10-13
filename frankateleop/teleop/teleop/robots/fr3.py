@@ -3,6 +3,7 @@ import torch
 from typing import Dict
 from typing import Optional
 import numpy as np
+from teleop.force_sensor import ForceSensor
 from teleop.robots.robot import Robot
 
 MAX_OPEN = 0.09
@@ -22,18 +23,6 @@ def _to_numpy(value) -> np.ndarray:
     return np.asarray(value, dtype=float)
 
 
-def _estimate_ee_external_wrench(
-    robot, joint_positions: np.ndarray, joint_torques: np.ndarray
-) -> np.ndarray:
-    try:
-        jacobian = robot.robot_model.compute_jacobian(torch.Tensor(joint_positions))
-        jacobian = _to_numpy(jacobian)
-        wrench, *_ = np.linalg.lstsq(jacobian.T, joint_torques, rcond=None)
-        return wrench
-    except Exception:
-        return np.full(6, np.nan)
-
-
 class fr3Robot(Robot):
     """A class representing a UR robot."""
 
@@ -43,6 +32,7 @@ class fr3Robot(Robot):
             franka_port: int=50051, 
             frankahand_port: int = 50053,
             joint_positions_desired: Optional[torch.Tensor] = None,
+            force_sensor_port: str = "/dev/ttyACM0",
             ):
             
         from polymetis import GripperInterface, RobotInterface
@@ -57,6 +47,7 @@ class fr3Robot(Robot):
             ip_address=robot_ip,
             port=frankahand_port,
         )
+        self.force_sensor = ForceSensor(port=force_sensor_port)
         if joint_positions_desired is None:
             self.robot.go_home()
         
@@ -101,6 +92,10 @@ class fr3Robot(Robot):
         self.robot.update_desired_joint_positions(torch.tensor(joint_state[:-1]))
         self.gripper.goto(width=(MAX_OPEN * (1 - joint_state[-1])), speed=1, force=1)
 
+    def zero_force_sensor(self) -> np.ndarray:
+        """Tare the end-effector force sensor for a new recording episode."""
+        return self.force_sensor.tare()
+
     def get_observations(self) -> Dict[str, np.ndarray]:
         robot_state = self.robot.get_robot_state()
         robot_joints = _to_numpy(robot_state.joint_positions)
@@ -121,11 +116,22 @@ class fr3Robot(Robot):
         for key in TORQUE_OBS_KEYS:
             observations[key] = _to_numpy(getattr(robot_state, key))
 
-        observations["ee_external_wrench"] = _estimate_ee_external_wrench(
-            self.robot,
-            robot_joints,
-            observations["motor_torques_external"],
+        (
+            latest_wrench,
+            wrench_before_50,
+            wrench_between_observations,
+            wrench_history_1s,
+            wrench_history_2s,
+        ) = self.force_sensor.capture_observation_windows()
+
+        # Every wrench sample is ordered as [Fx, Fy, Fz, Mx, My, Mz].
+        observations["ee_external_wrench"] = latest_wrench
+        observations["ee_external_wrench_before_50frames"] = wrench_before_50
+        observations["ee_external_wrench_between_observations"] = (
+            wrench_between_observations
         )
+        observations["ee_external_wrench_history_1s"] = wrench_history_1s
+        observations["ee_external_wrench_history_2s"] = wrench_history_2s
         return observations
 
 

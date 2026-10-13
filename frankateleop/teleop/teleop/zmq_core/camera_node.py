@@ -21,11 +21,11 @@ class ZMQClientCamera(CameraDriver):
     def read(
         self,
         img_size: Optional[Tuple[int, int]] = None,
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """Get the current state of the leader robot.
 
         Returns:
-            T: The current state of the leader robot.
+            Tuple: RGB image and depth image (None when depth is disabled).
         """
         # pack the image_size and send it to the server
         send_message = pickle.dumps(img_size)

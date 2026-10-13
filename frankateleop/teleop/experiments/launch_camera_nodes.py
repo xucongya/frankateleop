@@ -11,12 +11,15 @@ from teleop.zmq_core.camera_node import ZMQServerCamera
 class Args:
     # hostname: str = "127.0.0.1"
     hostname: str = "128.32.175.167"
+    # Enable depth on every camera; use --no-depth for RGB-only capture.
+    depth: bool = True
 
 
-def launch_server(port: int, camera_id: int, args: Args):
-    camera = RealSenseCamera(camera_id)
+def launch_server(port: int, camera_id: str, args: Args):
+    camera = RealSenseCamera(camera_id, enable_depth=args.depth)
     server = ZMQServerCamera(camera, port=port, host=args.hostname)
-    print(f"Starting camera server on port {port}")
+    mode = "RGB + depth" if args.depth else "RGB only"
+    print(f"Starting camera server on port {port} ({mode})")
     server.serve()
 
 
